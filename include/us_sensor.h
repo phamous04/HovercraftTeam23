@@ -1,13 +1,17 @@
 #ifndef US_SENSOR_H
 #define US_SENSOR_H
 
-#include <stdint.h>
+#include <avr/io.h>
 
+extern uint16_t front_cm;
+extern uint16_t left_cm;
+extern uint16_t right_cm;
 
 void us_init();
 
-float read_front_sensor();
-float read_left_sensor();
-float read_right_sensor();
+void trig_front_left();
+
+void us_trig(char s);
+void us_update();
 
 #endif

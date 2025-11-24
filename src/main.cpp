@@ -16,30 +16,28 @@
 // ----------------------- Test Main Program -------------------------
 void setup() {
     uart_init();
-    //us_init();
+    us_init();
     //ir_init();
-    servo_init();
-    fan_init();
+    //servo_init();
+    //fan_init();
     //imu_init();
     //imu_calibrate();
 
     sei();  // Enable global interrupts
 }
 
-void test_us_sensors() {
-    float front_distance = read_front_sensor();
-    float left_distance = read_left_sensor();
-    float right_distance = read_right_sensor();
+void test_us() {
+    us_update();   // triggers + reads all sensors
 
     uart_print("Front: ");
-    uart_print_float(front_distance);
-    uart_print(" cm, Left: ");
-    uart_print_float(left_distance);
-    uart_print(" cm, Right: ");
-    uart_print_float(right_distance);
-    uart_print(" cm\n");
+    uart_print_int(front_cm);
+    uart_print(" cm | Left: ");
+    uart_print_int(left_cm);
+    uart_print(" cm | Right: ");
+    uart_print_int(right_cm);
+    uart_print(" cm\r\n");
 
-    _delay_ms(500);
+    _delay_ms(100);   // adjust if needed
 }
 
 void test_ir_sensor() {
@@ -103,21 +101,10 @@ int main(void) {
 
 
     while (1) {
-        //test_thrust_fan();
-        //test_lift_fan();
-        //test_servo();
-        //ir_update();
-        //test_ir_sensor();
 
-        setLiftFan(255);
-        setThrustFan(120);
-        _delay_ms(20000);
+        test_us();
 
-        setLiftFan(0);
-        setThrustFan(0);
-        _delay_ms(3000);
 
+        return 0;
     }
-
-    return 0;
 }

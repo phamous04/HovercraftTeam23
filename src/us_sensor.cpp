@@ -4,21 +4,29 @@
 #include <avr/interrupt.h>
 #include "us_sensor.h"
 
-// Trigger Pins
+#include <time.h>
+
+// Trigger Pins (Right : P6, Left : P13, Front : P10)
 #define FRONT_LEFT_TRIG_PIN PB5
 #define RIGHT_TRIG_PIN      PB3
 
 // Echo Pins
 #define FRONT_ECHO_PIN  PB0
-#define LEFT_ECHO_PIN   PD3
-#define RIGHT_ECHO_PIN  PD2
+#define LEFT_ECHO_PIN   PD3 // INT1
+#define RIGHT_ECHO_PIN  PD2 // INT0
 
 // Timing Variables
-volatile uint16_t left_start = 0, left_end = 0;
-volatile uint16_t right_start = 0, right_end = 0;
+volatile uint8_t left_state = 0;
+volatile uint8_t right_state = 0;
+volatile uint8_t front_state = 0;
 
-volatile uint8_t left_done = 0;
-volatile uint8_t right_done = 0;
+volatile uint16_t left_last_cm = 0;
+volatile uint16_t right_last_cm = 0;
+volatile uint16_t front_last_cm = 0;
+
+uint16_t left_cm = 0;
+uint16_t right_cm = 0;
+uint16_t front_cm = 0;
 
 // Initialize Ultrasonic Sensors
 void us_init() {
@@ -29,19 +37,28 @@ void us_init() {
     // Echos
     DDRB &= ~(1 << FRONT_ECHO_PIN);
     DDRD &= ~(1 << LEFT_ECHO_PIN);
-    DDRB &= ~(1 << RIGHT_ECHO_PIN);
+    DDRD &= ~(1 << RIGHT_ECHO_PIN);
+
+    // Ensures no pullups
+    PORTB &= ~(1 << FRONT_ECHO_PIN);
+    PORTD &= ~(1 << LEFT_ECHO_PIN);
+    PORTD &= ~(1 << RIGHT_ECHO_PIN);
 
     // Timer1 setup
     TCCR1A = 0;
-    TCCR1B = (1<<CS11);
+    TCCR1B = (1 << CS11);
 
-    // Left sensor interrupt INT1 on PD3
-    EICRA |= (1 << ISC10);
-    EIMSK |= (1 << INT1);
+    PCICR |= (1 << PCIE0);
+    PCMSK0 |= (1 << PCINT0);
 
-    // Right sensor interrupt INT0 on PD2
-    EICRA |= (1 << ISC00);
-    EIMSK |= (1 << INT0);
+    // Left sensor interrupt INT1 on PD3, Right sensor interrupt INT0 on PD2
+    EICRA |= (1 << ISC10) | (1 << ISC00);
+    EICRA &= ~((1 << ISC01) | (1 << ISC11));
+
+    EIMSK |= (1 << INT1) | (1 << INT0);
+
+    left_state = 0;
+    right_state = 0;
 }
 
 // Trigger Functions
@@ -57,91 +74,126 @@ void trig_right() {
     PORTB &= ~(1<<RIGHT_TRIG_PIN);
 }
 
+void us_trig(char s) {
+    if (s == 'f') {
+        trig_front_left();
+    }
+    else if (s == 'l') {
+        trig_front_left();
+    }
+    else if (s == 'r'){
+        trig_right();
+    }
+}
+
+// ticks -> cm with Timer1 @ F_CPU/8 (16MHz -> 2MHz -> 0.5us/tick)
+// distance (cm) ≈ ticks / 116
+uint16_t ticks_to_cm(uint16_t ticks)
+{
+    return ticks / 116;
+}
+
 // Interrupt for Left and Right
 ISR(INT1_vect) {
-    if (PIND & (1<<LEFT_ECHO_PIN)) {
-        left_start = TCNT1;
-        left_done = 0;
+    uint8_t high = PIND & (1<<LEFT_ECHO_PIN);
+
+    if (left_state == 0) {
+        if (high) {
+            TCNT1 = 0;
+            left_state = 1;
+        }
     } else {
-        left_end = TCNT1;
-        left_done = 1;
+        if (!high) {
+            uint16_t ticks = TCNT1;
+            left_last_cm = ticks_to_cm(ticks);
+            left_state = 0;
+        }
     }
 }
 
 ISR (INT0_vect) {
-    if (PIND & (1<<RIGHT_ECHO_PIN)) {
-        right_start = TCNT1;
-        right_done = 0;
+    uint8_t high = PIND & (1<<RIGHT_ECHO_PIN);
+
+    if (right_state == 0) {
+        if (high) {
+            TCNT1 = 0;
+            right_state = 1;
+        }
     } else {
-        right_end = TCNT1;
-        right_done = 1;
+        if (!high) {
+            uint16_t ticks = TCNT1;
+            right_last_cm = ticks_to_cm(ticks);
+            right_state = 0;
+        }
     }
 }
 
-// Distance Calculation
-float calc_distance(uint16_t start, uint16_t end)
-{
-    uint16_t dt = (end >= start) ? (end - start)
-                : (0xFFFF - start + end);
+ISR (PCINT0_vect) {
+    uint8_t high = PINB & (1 << FRONT_ECHO_PIN);
 
-    return dt * 0.008575f;
+    if (front_state == 0) {
+        if (high) {
+            TCNT1 = 0;
+            front_state = 1;
+        }
+    } else {
+        if (!high) {
+            uint16_t ticks = TCNT1;
+            front_last_cm = ticks_to_cm(ticks);
+            front_state = 0;
+        }
+    }
 }
 
-// Read Sensors
-float read_front_sensor() {
-    uint16_t start, end;
+// uint16_t front_distance() {
+//     trig_front_left();
+//
+//     uint16_t timeout = 30000;
+//     uint8_t prev = PINB & (1 << FRONT_ECHO_PIN);
+//     uint16_t ticks = 0;
+//
+//     while (timeout--) {
+//         uint8_t now = PINB & (1 << FRONT_ECHO_PIN);
+//         if (!prev && now) {
+//             TCNT1 = 0;
+//             break;
+//         }
+//         prev = now;
+//         _delay_us(2);
+//     }
+//     if (timeout == 0) return 0;
+//
+//     TCNT1 = 0;
+//
+//     timeout = 30000;
+//     while (timeout--) {
+//         uint8_t now = PINB & (1 << FRONT_ECHO_PIN);
+//         if (prev && !now) {
+//             ticks = TCNT1;
+//             break;
+//         }
+//         prev = now;
+//         _delay_us(2);
+//     }
+//     if (timeout == 0) return 0;
+//
+//     return ticks_to_cm(TCNT1);
+// }
 
-    // Reset timer + trigger
-    TCNT1 = 0;
+
+void us_update() {
+    // Front
     trig_front_left();
+    _delay_ms(60);
+    front_cm = front_last_cm;
 
-    // Wait for rising edge
-    uint16_t timeout = 0;
-    while (!(PINB & (1<<FRONT_ECHO_PIN)))
-    {
-        if (++timeout > 30000) return -1;
-        _delay_us(1);
-    }
-    start = TCNT1;
-
-    // Wait for falling edge
-    while (PINB & (1<<FRONT_ECHO_PIN))
-    {
-        if (++timeout > 60000) return -1;
-        _delay_us(1);
-    }
-    end = TCNT1;
-
-    return calc_distance(start, end);
-}
-
-float read_left_sensor() {
-    left_done = 0;
-    TCNT1 = 0;
+    // Left
     trig_front_left();
+    _delay_ms(60);
+    left_cm = left_last_cm;
 
-    uint16_t timeout = 0;
-    while (!left_done)
-    {
-        if (++timeout > 30000) return -1;
-        _delay_us(1);
-    }
-
-    return calc_distance(left_start, left_end);
-}
-
-float read_right_sensor()
-{
-    right_done = 0;
-    TCNT1 = 0;
+    // Right
     trig_right();
-
-    uint16_t timeout = 0;
-    while (!right_done)
-    {
-        if (++timeout > 30000) return -1;
-        _delay_us(1);
-    }
-
-    return calc_distance(right_start, right_end);
+    _delay_ms(60);
+    right_cm = right_last_cm;
 }
