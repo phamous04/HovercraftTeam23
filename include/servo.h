@@ -1,12 +1,9 @@
 #ifndef SERVO_H
 #define SERVO_H
 
-#include <stdint.h>
+#include <avr/io.h>
 
-
-void servo_init();
+void servo_init(void);
 void setServoAngle(float angle);
-void left_turn();
-void right_turn();
 
 #endif

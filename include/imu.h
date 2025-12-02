@@ -3,16 +3,27 @@
 
 #include <stdint.h>
 
-// MPU-6050 I2C address (AD0 = GND)
-#define IMU_ADDR 0x68
+// Public IMU API
 
-void imu_init();
-void imu_read();
-void imu_calibrate();
-void imu_update();
+// Initialize MPU-6050 (I2C + registers)
+void imu_init(void);
 
-float imu_get_yaw();
-void imu_reset_yaw();
-float imu_get_gyro_z();
+// Calibrate gyro Z bias (keep device still while running)
+void imu_calibrate(void);
 
-#endif
+// Update IMU state (call frequently, non-blocking)
+void imu_update(void);
+
+// Get current yaw angle (degrees, -180 to +180)
+float imu_get_yaw(void);
+
+// Reset yaw angle to 0
+void imu_reset_yaw(void);
+
+// Get raw gyro Z (deg/s, UNCORRECTED)
+float imu_get_gyro_z(void);
+
+// Get acceleration magnitude (m/s^2)
+float imu_get_accel_total(void);
+
+#endif // IMU_H

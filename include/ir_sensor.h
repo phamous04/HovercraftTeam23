@@ -8,5 +8,6 @@ uint16_t ir_read();
 void ir_update();
 uint16_t ir_get_distance();
 uint8_t ir_detect();
+uint16_t ir_get_cm();
 
 #endif

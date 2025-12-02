@@ -34,3 +34,10 @@ uint16_t ir_get_distance() {
 uint8_t ir_detect() {
     return (ir_raw > IR_BAR_THRESHOLD) ? 1 : 0;
 }
+
+uint16_t ir_get_cm() {
+    float v = (float)ir_raw * (5.0 / 1023.0);
+    float d = 27.86 * pow(v, -1.15);
+    return (uint16_t)d;
+}
+

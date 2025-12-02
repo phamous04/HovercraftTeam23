@@ -6,6 +6,8 @@
 void fan_init();
 
 void setThrustFan(uint8_t speed);
-void setLiftFan(uint8_t speed);
+void setLiftFanOn();
+void setLiftFanOff();
+
 
 #endif

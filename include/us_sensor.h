@@ -1,17 +1,16 @@
 #ifndef US_SENSOR_H
 #define US_SENSOR_H
 
-#include <avr/io.h>
+#include <stdint.h>
 
+// Global distance variables
 extern uint16_t front_cm;
-extern uint16_t left_cm;
 extern uint16_t right_cm;
 
-void us_init();
-
-void trig_front_left();
-
-void us_trig(char s);
-void us_update();
+// Function prototypes
+void us_init(void);
+void us_update(void);
+void trig_front(void);
+void trig_right(void);
 
 #endif
