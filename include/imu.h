@@ -3,7 +3,6 @@
 
 #include <stdint.h>
 
-// Public IMU API
 
 // Initialize MPU-6050 (I2C + registers)
 void imu_init(void);
@@ -26,4 +25,4 @@ float imu_get_gyro_z(void);
 // Get acceleration magnitude (m/s^2)
 float imu_get_accel_total(void);
 
-#endif // IMU_H
+#endif

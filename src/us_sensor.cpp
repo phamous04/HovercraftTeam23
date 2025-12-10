@@ -4,11 +4,6 @@
 #include <util/delay.h>
 #include "us_sensor.h"
 
-// =========================================================
-// HARD-REALTIME SAFE ULTRASONIC DRIVER (MICROSECOND BASED)
-// Front: TRIG = PB5, ECHO = PD3 (INT1)
-// Right: TRIG = PB3, ECHO = PD2 (INT0)
-// =========================================================
 
 // ---- PINS ----
 #define FRONT_TRIG_PIN  PB5
@@ -35,15 +30,12 @@ uint16_t right_cm = 9999;
 
 void us_init(void)
 {
-    // TRIG PINS OUTPUT
     DDRB |= (1 << FRONT_TRIG_PIN) | (1 << RIGHT_TRIG_PIN);
     PORTB &= ~((1 << FRONT_TRIG_PIN) | (1 << RIGHT_TRIG_PIN));
 
-    // ECHO PINS INPUT
     DDRD &= ~((1 << FRONT_ECHO_PIN) | (1 << RIGHT_ECHO_PIN));
     PORTD &= ~((1 << FRONT_ECHO_PIN) | (1 << RIGHT_ECHO_PIN));
 
-    // External interrupts on any edge
     EICRA = (1 << ISC10) | (1 << ISC00);
     EIMSK = (1 << INT1) | (1 << INT0);
 
@@ -98,32 +90,45 @@ static void trig_right(void)
 
 void us_update(void)
 {
-    // ----- FRONT -----
+
     trig_front();
-    _delay_ms(25);
+    _delay_ms(45);
 
     if (front_end_us > front_start_us)
     {
         uint32_t dt_us = front_end_us - front_start_us;
-        front_cm = dt_us / 58;      // standard HC-SR04 conversion
+        uint16_t cm = dt_us / 58;
+
+        if (cm > 400)
+            front_cm = 9999;
+        else
+            front_cm = cm;
     }
     else
+    {
         front_cm = 9999;
+    }
 
     front_start_us = front_end_us = 0;
 
 
-    // ----- RIGHT -----
     trig_right();
-    _delay_ms(25);
+    _delay_ms(45);
 
     if (right_end_us > right_start_us)
     {
         uint32_t dt_us = right_end_us - right_start_us;
-        right_cm = dt_us / 58;
+        uint16_t cm = dt_us / 58;
+
+        if (cm > 400)
+            right_cm = 9999;
+        else
+            right_cm = cm;
     }
     else
+    {
         right_cm = 9999;
+    }
 
     right_start_us = right_end_us = 0;
 }

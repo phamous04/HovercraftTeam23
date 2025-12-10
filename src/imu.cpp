@@ -5,13 +5,10 @@
 
 #include "imu.h"
 #include "i2c.h"
-#include "uart.h"   // For debug prints
 
-// =========================
-// Config & constants
-// =========================
 
-#define IMU_ADDR            0x68    // MPU-6050 I2C address (AD0 = GND)
+
+#define IMU_ADDR            0x68
 
 // MPU-6050 registers
 #define REG_PWR_MGMT_1      0x6B
@@ -19,26 +16,20 @@
 #define REG_CONFIG          0x1A
 #define REG_GYRO_CONFIG     0x1B
 #define REG_ACCEL_CONFIG    0x1C
-#define REG_ACCEL_XOUT_H    0x3B    // Start of accel/gyro data block
+#define REG_ACCEL_XOUT_H    0x3B
 
-// We configure: gyro ±500 dps, accel ±4g
-#define GYRO_SENS           65.5f    // LSB per (deg/s)
-#define ACCEL_SENS          8192.0f  // LSB per g (±4g)
+#define GYRO_SENS           65.5f
+#define ACCEL_SENS          8192.0f
 #define GRAVITY             9.81f
 
-// Target update interval (10 ms)
 #define IMU_UPDATE_INTERVAL_US   10000UL
 
-// Low-pass filter for gyro (0 < alpha <= 1)
-// Smaller alpha -> more smoothing, more lag.
 #define GYRO_LP_ALPHA       0.4f
 
-// Thresholds for "stationary" detection (for drift compensation)
-#define ACC_MAG_TOL_G       0.15f    // allowed |accel_total - 1g|
-#define GZ_STATIONARY_THR   1.0f     // deg/s
-#define BIAS_ADAPT_RATE     0.001f   // how fast bias updates when stationary
+#define ACC_MAG_TOL_G       0.15f
+#define GZ_STATIONARY_THR   1.0f
+#define BIAS_ADAPT_RATE     0.001f
 
-// Enable / disable debug prints
 #define IMU_DEBUG           0
 
 
@@ -72,14 +63,12 @@ static void mpu_write_reg(uint8_t reg, uint8_t val)
 
 static void mpu_read_bytes(uint8_t reg, uint8_t *buf, uint8_t len)
 {
-    // Set register address
     i2c_start();
-    i2c_write((IMU_ADDR << 1) | 0);   // write
+    i2c_write((IMU_ADDR << 1) | 0);
     i2c_write(reg);
 
-    // Repeated start, now read
     i2c_start();
-    i2c_write((IMU_ADDR << 1) | 1);   // read
+    i2c_write((IMU_ADDR << 1) | 1);
 
     for (uint8_t i = 0; i < len; i++)
     {
@@ -105,20 +94,15 @@ void imu_init(void)
     uart_print("IMU: init...\r\n");
 #endif
 
-    // Wake up MPU-6050
     mpu_write_reg(REG_PWR_MGMT_1, 0x00);
     _delay_ms(100);
 
-    // Sample rate = 1kHz / (7 + 1) = 125 Hz
     mpu_write_reg(REG_SMPLRT_DIV, 0x07);
 
-    // CONFIG: DLPF ~44 Hz (good middle ground)
     mpu_write_reg(REG_CONFIG, 0x03);
 
-    // GYRO_CONFIG: ±500 dps (bits 4:3 = 01)
     mpu_write_reg(REG_GYRO_CONFIG, (1 << 3));
 
-    // ACCEL_CONFIG: ±4g (bits 4:3 = 01)
     mpu_write_reg(REG_ACCEL_CONFIG, (1 << 3));
 
     imu_yaw_deg      = 0.0f;
@@ -163,12 +147,11 @@ void imu_calibrate(void)
 #endif
 }
 
-// Core update – call this OFTEN in main loop
+// Core update
 void imu_update(void)
 {
     uint32_t now = micros();
 
-    // First call: just initialize timestamp, don't integrate
     if (imu_first_update)
     {
         last_imu_time_us = now;
@@ -176,29 +159,23 @@ void imu_update(void)
         return;
     }
 
-    // Unsigned subtraction is wrap-safe even when micros() overflows
     uint32_t dt_us = now - last_imu_time_us;
 
-    // Not yet time to update → exit
     if (dt_us < IMU_UPDATE_INTERVAL_US)
         return;
 
     last_imu_time_us = now;
-    float dt_sec = dt_us / 1000000.0f;   // real dt in seconds
+    float dt_sec = dt_us / 1000000.0f;
 
-    // ---------- Read sensor block ----------
     uint8_t d[14];
     mpu_read_bytes(REG_ACCEL_XOUT_H, d, 14);
 
-    // Accel raw
     int16_t ax_raw = (int16_t)((d[0] << 8) | d[1]);
     int16_t ay_raw = (int16_t)((d[2] << 8) | d[3]);
     int16_t az_raw = (int16_t)((d[4] << 8) | d[5]);
 
-    // Gyro Z raw
     int16_t gz_raw = (int16_t)((d[12] << 8) | d[13]);
 
-    // ---------- Convert accel to m/s^2 ----------
     float ax = ((float)ax_raw / ACCEL_SENS) * GRAVITY;
     float ay = ((float)ay_raw / ACCEL_SENS) * GRAVITY;
     float az = ((float)az_raw / ACCEL_SENS) * GRAVITY;
@@ -206,22 +183,16 @@ void imu_update(void)
     float acc_mag = sqrtf(ax * ax + ay * ay + az * az);
     accel_total_mps2 = acc_mag;
 
-    // ---------- Convert gyro to deg/s ----------
     gyro_z_dps = (float)gz_raw / GYRO_SENS;
     float gz_corrected = gyro_z_dps - gyro_z_bias;
 
-    // ---------- Low-pass filter on gyro ----------
     gyro_z_filtered = gyro_z_filtered + GYRO_LP_ALPHA * (gz_corrected - gyro_z_filtered);
 
-    // ---------- Integrate yaw ----------
     imu_yaw_deg += gyro_z_filtered * dt_sec;
 
-    // Wrap yaw to [-180, 180]
     if (imu_yaw_deg > 180.0f)  imu_yaw_deg -= 360.0f;
     if (imu_yaw_deg < -180.0f) imu_yaw_deg += 360.0f;
 
-    // ---------- Slow bias adaptation (drift compensation) ----------
-    // If we are close to 1g and rotation is small, assume we're "still"
     float acc_err_g = fabsf((acc_mag / GRAVITY) - 1.0f);
     if (acc_err_g < ACC_MAG_TOL_G && fabsf(gz_corrected) < GZ_STATIONARY_THR)
     {

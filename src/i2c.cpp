@@ -3,14 +3,13 @@
 #include <util/delay.h>
 
 #define F_CPU      16000000UL
-#define SCL_FREQ   100000UL   // 100 kHz
+#define SCL_FREQ   100000UL
 
 void i2c_init(void)
 {
-    // SCL = F_CPU / (16 + 2*TWBR*prescaler)
-    TWSR = 0x00;  // prescaler = 1
+    TWSR = 0x00;
     TWBR = (uint8_t)(((F_CPU / SCL_FREQ) - 16) / 2);
-    TWCR = (1 << TWEN);   // enable TWI
+    TWCR = (1 << TWEN);
 }
 
 void i2c_start(void)
